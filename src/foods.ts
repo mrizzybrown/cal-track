@@ -251,6 +251,44 @@ export async function searchOpenFoodFacts(query: string, signal?: AbortSignal): 
   return rankUkProducts(found).slice(0, 25)
 }
 
+// ---------- Barcodes ----------
+
+/** Barcode forms to try: a 12-digit UPC is also stored as a 13-digit EAN with a leading 0, and back. */
+export function barcodeVariants(code: string): string[] {
+  const c = code.replace(/\D/g, '')
+  if (c.length === 12) return [c, `0${c}`]
+  if (c.length === 13 && c.startsWith('0')) return [c, c.slice(1)]
+  return [c]
+}
+
+/** A food you've saved with this barcode, if any. */
+export async function findFoodByBarcode(code: string, database: CalTrackDB = db): Promise<Food | undefined> {
+  for (const c of barcodeVariants(code)) {
+    const f = await database.foods.where('barcode').equals(c).first()
+    if (f) return f
+  }
+  return undefined
+}
+
+const OFF_PRODUCT_FIELDS = 'code,product_name,product_name_en,brands,stores,serving_size,serving_quantity,nutriments'
+
+/**
+ * Looks up a scanned product on Open Food Facts (UK site). Returns null when it isn't listed or has
+ * no calories. Not limited to UK-tagged products: you're holding it, so it's sold here.
+ */
+export async function lookupBarcode(code: string, signal?: AbortSignal): Promise<FoodCandidate | null> {
+  for (const c of barcodeVariants(code)) {
+    const res = await fetch(`https://uk.openfoodfacts.org/api/v2/product/${c}.json?fields=${OFF_PRODUCT_FIELDS}`, { signal })
+    if (res.status === 404) continue
+    if (!res.ok) throw new Error(`Open Food Facts: HTTP ${res.status}`)
+    const data = (await res.json()) as { status?: number; product?: OffProduct }
+    if (data.status !== 1 || !data.product) continue
+    const found = offToCandidate({ code: c, ...data.product })
+    if (found) return found
+  }
+  return null
+}
+
 // ---------- Saving and logging ----------
 
 /** Makes sure a candidate is in your foods table and returns its id. */
@@ -332,6 +370,7 @@ export async function updateFoodEntry(
 export interface CustomFoodInput {
   name: string
   brand?: string
+  barcode?: string
   servingLabel: string
   servingGrams: number | null
   kcal: number
@@ -351,6 +390,7 @@ export async function createCustomFood(input: CustomFoodInput, database: CalTrac
   return database.foods.add({
     name: input.name.trim(),
     brand: input.brand?.trim() || undefined,
+    barcode: input.barcode,
     source: 'custom',
     kcal: Math.round(input.kcal * per100),
     protein: r1(input.protein * per100),

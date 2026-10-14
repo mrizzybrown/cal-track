@@ -14,7 +14,16 @@ const NUMBER_FIELDS: { key: Key; label: string; unit: string; optional?: boolean
 ]
 
 /** Create a food from a nutrition label. Opens the serving picker for it when saved. */
-export function CustomFoodForm({ initialName, onCreated }: { initialName: string; onCreated: (f: FoodCandidate) => void }) {
+export function CustomFoodForm({
+  initialName,
+  barcode,
+  onCreated,
+}: {
+  initialName: string
+  /** Set when creating a food for a scanned barcode that wasn't found, so the next scan finds it. */
+  barcode?: string
+  onCreated: (f: FoodCandidate) => void
+}) {
   const [name, setName] = useState(initialName)
   const [brand, setBrand] = useState('')
   const [servingLabel, setServingLabel] = useState('1 serving')
@@ -40,6 +49,7 @@ export function CustomFoodForm({ initialName, onCreated }: { initialName: string
     const id = await createCustomFood({
       name,
       brand,
+      barcode,
       servingLabel,
       servingGrams: typeof parsed.servingGrams === 'number' ? parsed.servingGrams : null,
       kcal: val('kcal'),
@@ -60,6 +70,11 @@ export function CustomFoodForm({ initialName, onCreated }: { initialName: string
         save()
       }}
     >
+      {barcode && (
+        <p className="hint">
+          Barcode {barcode} isn't in the database yet. Add it from the label and it'll be found next time you scan it.
+        </p>
+      )}
       <div className="card form inset">
         <div className="field">
           <label htmlFor="cf-name">Food name</label>

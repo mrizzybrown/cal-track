@@ -5,6 +5,8 @@ import { dateLabel } from '../entries'
 import { localDateKey } from '../units'
 import {
   favoriteFoods,
+  findFoodByBarcode,
+  lookupBarcode,
   foodToCandidate,
   loadUsdaFoods,
   myFoods,
@@ -18,6 +20,7 @@ import {
   type FoodCandidate,
 } from '../foods'
 import { copyMealFromDay, listSavedMeals, logSavedMeal, mealTotals, pastMeals, type PastMeal } from '../savedMeals'
+import { BarcodeScanner } from './BarcodeScanner'
 import { CustomFoodForm } from './CustomFoodForm'
 import { QuickAddForm } from './QuickAddForm'
 import { ServingPicker } from './ServingPicker'
@@ -28,7 +31,9 @@ const fmt = (n: number) => Math.round(n).toLocaleString()
 type View =
   | { kind: 'home' }
   | { kind: 'quick' }
-  | { kind: 'custom' }
+  | { kind: 'custom'; barcode?: string }
+  | { kind: 'scan' }
+  | { kind: 'lookup'; code: string; failed?: boolean }
   | { kind: 'serving'; food: FoodCandidate; last?: { amount: number; unit: string } }
 
 interface Props {
@@ -146,6 +151,19 @@ export function AddFoodSheet({ date, meal: initialMeal, mealNames, entry, onClos
     setView({ kind: 'serving', food: foodToCandidate(f), last })
   }
 
+  const lookupCode = async (code: string) => {
+    setView({ kind: 'lookup', code })
+    const saved = await findFoodByBarcode(code)
+    if (saved) return openSaved(saved)
+    try {
+      const found = await lookupBarcode(code)
+      if (found) await openFood(found)
+      else setView({ kind: 'custom', barcode: code })
+    } catch {
+      setView({ kind: 'lookup', code, failed: true })
+    }
+  }
+
   const markAdded = (key: string, ids: number[]) => setAdded((m) => new Map(m).set(key, ids))
 
   const addFood = async (f: Food) => markAdded(`f${f.id}`, [await relogFood(f, date, meal)])
@@ -172,6 +190,8 @@ export function AddFoodSheet({ date, meal: initialMeal, mealNames, entry, onClos
     home: 'Add food',
     quick: entry ? 'Edit entry' : 'Quick add',
     custom: 'New food',
+    scan: 'Scan barcode',
+    lookup: 'Scan barcode',
     serving: entry ? 'Edit entry' : 'How much?',
   }
   const back = !entry && view.kind !== 'home' ? () => setView({ kind: 'home' }) : undefined
@@ -212,8 +232,29 @@ export function AddFoodSheet({ date, meal: initialMeal, mealNames, entry, onClos
       )}
 
       {view.kind === 'custom' && (
-        <CustomFoodForm initialName={query.trim()} onCreated={(food) => setView({ kind: 'serving', food })} />
+        <CustomFoodForm
+          initialName={view.barcode ? '' : query.trim()}
+          barcode={view.barcode}
+          onCreated={(food) => setView({ kind: 'serving', food })}
+        />
       )}
+
+      {view.kind === 'scan' && <BarcodeScanner onCode={lookupCode} />}
+
+      {view.kind === 'lookup' &&
+        (view.failed ? (
+          <>
+            <p className="hint error">Couldn't look up {view.code}. You may be offline, or the database is busy.</p>
+            <button type="button" className="primary-button" onClick={() => lookupCode(view.code)}>
+              Try again
+            </button>
+            <button type="button" className="secondary-button" onClick={() => setView({ kind: 'custom', barcode: view.code })}>
+              Add it from the label
+            </button>
+          </>
+        ) : (
+          <p className="hint center">Looking up {view.code}…</p>
+        ))}
 
       {view.kind === 'home' && !entry && (
         <>
@@ -236,10 +277,14 @@ export function AddFoodSheet({ date, meal: initialMeal, mealNames, entry, onClos
 
           {!query.trim() && (
             <>
-              <div className="action-row">
+              <div className="action-row three">
+                <button type="button" className="action-tile" onClick={() => setView({ kind: 'scan' })}>
+                  Scan
+                  <span className="muted small">Barcode</span>
+                </button>
                 <button type="button" className="action-tile" onClick={() => setView({ kind: 'quick' })}>
                   Quick add
-                  <span className="muted small">Type calories</span>
+                  <span className="muted small">Calories</span>
                 </button>
                 <button type="button" className="action-tile" onClick={() => setView({ kind: 'custom' })}>
                   New food

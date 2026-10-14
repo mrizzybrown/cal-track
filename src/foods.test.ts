@@ -1,9 +1,12 @@
 import 'fake-indexeddb/auto'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CalTrackDB } from './db'
 import { entriesForDate } from './entries'
 import {
+  barcodeVariants,
   createCustomFood,
+  findFoodByBarcode,
+  lookupBarcode,
   favoriteFoods,
   recentFoods,
   relogFood,
@@ -187,5 +190,46 @@ describe('fast logging', () => {
     expect((await favoriteFoods(db)).map((f) => f.id)).toEqual([id])
     await setFavorite({ ...banana, id }, false, db)
     expect(await favoriteFoods(db)).toEqual([])
+  })
+})
+
+describe('barcodes', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('tries UPC and EAN forms of the same code', () => {
+    expect(barcodeVariants('012345678905')).toEqual(['012345678905', '0012345678905'])
+    expect(barcodeVariants('0012345678905')).toEqual(['0012345678905', '012345678905'])
+    expect(barcodeVariants('5000157024671')).toEqual(['5000157024671'])
+  })
+
+  it('finds a food you saved for a barcode that was not in the database', async () => {
+    const db = new CalTrackDB('foods-barcode')
+    await createCustomFood(
+      { name: 'Corner shop flapjack', barcode: '5012345678900', servingLabel: '1 bar', servingGrams: 60, kcal: 250, protein: 3, carbs: 30, fat: 12 },
+      db,
+    )
+    expect((await findFoodByBarcode('5012345678900', db))?.name).toBe('Corner shop flapjack')
+    expect(await findFoodByBarcode('5000000000000', db)).toBeUndefined()
+  })
+
+  it('looks up a scanned product, retrying the other barcode form', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('/product/012345678905.json')) return new Response('{}', { status: 404 })
+      return Response.json({
+        status: 1,
+        product: { product_name: 'Peanut Butter', brands: 'Brand', nutriments: { 'energy-kcal_100g': 600, proteins_100g: 25 } },
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const found = await lookupBarcode('012345678905')
+    expect(found).toMatchObject({ name: 'Peanut Butter', barcode: '0012345678905', kcal: 600, protein: 25 })
+    expect(fetchMock.mock.calls[0][0]).toContain('uk.openfoodfacts.org/api/v2/product/012345678905.json')
+  })
+
+  it('returns null for an unknown product and throws when offline', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ status: 0 })))
+    expect(await lookupBarcode('5000000000000')).toBeNull()
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('offline') }))
+    await expect(lookupBarcode('5000000000000')).rejects.toThrow()
   })
 })
