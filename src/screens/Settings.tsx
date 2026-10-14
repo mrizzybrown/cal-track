@@ -81,6 +81,11 @@ export function SettingsScreen() {
         </p>
         <p className="muted small">Backup export and import come in a later update.</p>
       </section>
+
+      <p className="hint credits">
+        Food data: USDA FoodData Central (SR Legacy), via the TempoLife food dataset (tempolife.app), CC-BY-4.0.
+        Packaged foods from Open Food Facts (ODbL).
+      </p>
     </>
   )
 }
