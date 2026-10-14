@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { getSettings, type Entry, type MealIndex } from '../db'
+import { db, getSettings, type Entry, type MealIndex } from '../db'
 import { entriesForDate, mealForTime, shiftDateKey, sumTotals } from '../entries'
+import { copyMealFromDay } from '../savedMeals'
 import { localDateKey } from '../units'
 import { QuickAddSheet } from '../components/QuickAddSheet'
+import { SaveMealSheet } from '../components/SaveMealSheet'
+import { Toast, type ToastState } from '../components/Toast'
 
 const MACROS = [
   { key: 'protein', target: 'proteinTarget', label: 'Protein' },
@@ -23,14 +26,37 @@ function dateLabel(key: string, today: string): string {
 
 const fmt = (n: number) => Math.round(n).toLocaleString()
 
+const previousHas = (entries: Entry[], meal: MealIndex) => entries.some((e) => e.meal === meal)
+
 export function TodayScreen() {
   const today = localDateKey()
   const [date, setDate] = useState(today)
   const [sheet, setSheet] = useState<SheetState>(null)
+  const [saveSheet, setSaveSheet] = useState<{ entries: Entry[]; name: string } | null>(null)
+  const [toast, setToast] = useState<ToastState | null>(null)
+  const clearToast = useCallback(() => setToast(null), [])
 
   const settings = useLiveQuery(() => getSettings(), [])
   const entries = useLiveQuery(() => entriesForDate(date), [date])
-  if (!settings || !entries) return null
+  const previousDay = shiftDateKey(date, -1)
+  const previous = useLiveQuery(() => entriesForDate(previousDay), [previousDay])
+  if (!settings || !entries || !previous) return null
+
+  const onLogged = (ids: number[], label: string) =>
+    setToast({ message: `Logged ${label}`, undo: () => db.entries.bulkDelete(ids) })
+
+  const copyPrevious = async (meal: MealIndex, name: string) => {
+    const before = await db.entries.where('date').equals(date).primaryKeys()
+    const count = await copyMealFromDay(previousDay, date, meal)
+    if (!count) return
+    setToast({
+      message: `Copied ${name} from ${dateLabel(previousDay, today).toLowerCase()}`,
+      undo: async () => {
+        const after = await db.entries.where('[date+meal]').equals([date, meal]).primaryKeys()
+        await db.entries.bulkDelete(after.filter((id) => !before.includes(id)))
+      },
+    })
+  }
 
   const totals = sumTotals(entries)
   const left = settings.kcalTarget - totals.kcal
@@ -107,6 +133,22 @@ export function TodayScreen() {
                 <span className="entry-kcal">{fmt(e.kcal)}</span>
               </button>
             ))}
+            {items.length > 0 ? (
+              <div className="meal-actions">
+                <button type="button" className="link-button" onClick={() => setSaveSheet({ entries: items, name })}>
+                  Save {name.toLowerCase()} to My Meals
+                </button>
+              </div>
+            ) : (
+              previousHas(previous, meal) && (
+                <div className="meal-actions">
+                  <button type="button" className="link-button" onClick={() => copyPrevious(meal, name)}>
+                    Copy {dateLabel(previousDay, today).toLowerCase()}'s {name.toLowerCase()} (
+                    {fmt(sumTotals(previous.filter((p) => p.meal === meal)).kcal)} kcal)
+                  </button>
+                </div>
+              )
+            )}
           </section>
         )
       })}
@@ -129,8 +171,20 @@ export function TodayScreen() {
           entry={sheet.entry}
           mealNames={settings.mealNames}
           onClose={() => setSheet(null)}
+          onLogged={onLogged}
         />
       )}
+
+      {saveSheet && (
+        <SaveMealSheet
+          entries={saveSheet.entries}
+          defaultName={saveSheet.name}
+          onClose={() => setSaveSheet(null)}
+          onSaved={(n) => setToast({ message: `Saved ${n} to My Meals` })}
+        />
+      )}
+
+      {toast && <Toast toast={toast} onDone={clearToast} />}
     </>
   )
 }
