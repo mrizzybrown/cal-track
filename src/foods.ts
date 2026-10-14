@@ -16,6 +16,8 @@ export interface FoodCandidate {
   servings: ServingSize[]
   /** Custom foods entered per serving with no weight can only be logged in servings. */
   servingOnly?: boolean
+  /** Main UK supermarkets that sell this product (Open Food Facts only). */
+  stores?: string[]
   /** Set when this candidate is already in your foods table. */
   id?: number
 }
@@ -152,12 +154,15 @@ export function searchFoods(query: string, mine: FoodCandidate[], usda: FoodCand
   return [...own, ...general].slice(0, limit)
 }
 
-// ---------- Open Food Facts (online) ----------
+// ---------- Open Food Facts (online, UK) ----------
 
 interface OffProduct {
   code?: string
   product_name?: string
+  product_name_en?: string
   brands?: string
+  stores?: string
+  countries_tags?: string[]
   serving_size?: string
   serving_quantity?: number | string
   nutriments?: Record<string, number | string | undefined>
@@ -168,15 +173,38 @@ const num = (v: unknown): number | undefined => {
   return typeof n === 'number' && Number.isFinite(n) ? n : undefined
 }
 
-/** Converts an Open Food Facts product to a candidate, or null if it lacks calories. */
+/** Main UK supermarkets, as they are usually written in Open Food Facts store lists. */
+export const UK_SUPERMARKETS: [name: string, match: RegExp][] = [
+  ['Tesco', /tesco/i],
+  ["Sainsbury's", /sainsbury/i],
+  ['Asda', /asda/i],
+  ['Aldi', /aldi/i],
+  ['Lidl', /lidl/i],
+  ['Morrisons', /morrison/i],
+  ['M&S', /m\s*&\s*s|marks\s*(&|and)\s*spencer/i],
+  ['Waitrose', /waitrose/i],
+  ['Co-op', /co-?op\b/i],
+  ['Iceland', /iceland/i],
+  ['Ocado', /ocado/i],
+]
+
+/** The main UK supermarkets named in a product's store list, e.g. "Tesco, Aldi". */
+export function ukStores(stores?: string): string[] {
+  if (!stores) return []
+  return UK_SUPERMARKETS.filter(([, re]) => re.test(stores)).map(([name]) => name)
+}
+
+/** Converts an Open Food Facts product to a candidate, or null if it lacks calories or isn't sold in the UK. */
 export function offToCandidate(p: OffProduct): FoodCandidate | null {
+  if (p.countries_tags && !p.countries_tags.includes('en:united-kingdom')) return null
   const n = p.nutriments ?? {}
   const kcal = num(n['energy-kcal_100g']) ?? (num(n['energy_100g']) !== undefined ? num(n['energy_100g'])! / 4.184 : undefined)
-  const name = p.product_name?.trim()
+  const name = (p.product_name_en || p.product_name)?.trim()
   if (!name || kcal === undefined || !p.code) return null
   const servingGrams = num(p.serving_quantity)
   const servings: ServingSize[] =
     servingGrams && servingGrams > 0 ? [{ label: p.serving_size?.trim() || 'serving', grams: servingGrams }] : []
+  const stores = ukStores(p.stores)
   return {
     key: `off:${p.code}`,
     name,
@@ -189,20 +217,38 @@ export function offToCandidate(p: OffProduct): FoodCandidate | null {
     carbs: r1(num(n['carbohydrates_100g']) ?? 0),
     fat: r1(num(n['fat_100g']) ?? 0),
     servings,
+    stores: stores.length ? stores : undefined,
   }
 }
 
-const OFF_FIELDS = 'code,product_name,brands,serving_size,serving_quantity,nutriments'
+/** Puts products from the main UK supermarkets first, keeping Open Food Facts' popularity order otherwise. */
+export function rankUkProducts(list: FoodCandidate[]): FoodCandidate[] {
+  return list
+    .map((f, i) => ({ f, i }))
+    .sort((a, b) => (b.f.stores ? 1 : 0) - (a.f.stores ? 1 : 0) || a.i - b.i)
+    .map((x) => x.f)
+}
 
-/** Searches Open Food Facts for packaged foods. Needs internet; limited to about 10 searches a minute. */
-export async function searchOpenFoodFacts(query: string, signal?: AbortSignal): Promise<FoodCandidate[]> {
-  const url =
-    `https://world.openfoodfacts.org/cgi/search.pl?search_simple=1&json=1&page_size=25` +
+const OFF_FIELDS = 'code,product_name,product_name_en,brands,stores,countries_tags,serving_size,serving_quantity,nutriments'
+
+export function openFoodFactsUrl(query: string): string {
+  return (
+    `https://uk.openfoodfacts.org/cgi/search.pl?search_simple=1&json=1&page_size=40` +
+    `&tagtype_0=countries&tag_contains_0=contains&tag_0=united-kingdom&sort_by=unique_scans_n` +
     `&fields=${OFF_FIELDS}&search_terms=${encodeURIComponent(query)}`
-  const res = await fetch(url, { signal })
+  )
+}
+
+/**
+ * Searches Open Food Facts for packaged foods sold in the UK, most scanned first, with the main
+ * supermarkets' products on top. Needs internet; limited to about 10 searches a minute.
+ */
+export async function searchOpenFoodFacts(query: string, signal?: AbortSignal): Promise<FoodCandidate[]> {
+  const res = await fetch(openFoodFactsUrl(query), { signal })
   if (!res.ok) throw new Error(`Open Food Facts: HTTP ${res.status}`)
   const data = (await res.json()) as { products?: OffProduct[] }
-  return (data.products ?? []).map(offToCandidate).filter((c): c is FoodCandidate => c !== null)
+  const found = (data.products ?? []).map(offToCandidate).filter((c): c is FoodCandidate => c !== null)
+  return rankUkProducts(found).slice(0, 25)
 }
 
 // ---------- Saving and logging ----------

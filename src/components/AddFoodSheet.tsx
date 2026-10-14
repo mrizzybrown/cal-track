@@ -26,6 +26,9 @@ interface Props {
   onLogged?: (ids: number[], label: string) => void
 }
 
+const MIN_ONLINE_QUERY = 3
+const onlineCache = new Map<string, FoodCandidate[]>()
+
 type OnlineState = { status: 'idle' } | { status: 'loading' } | { status: 'done'; results: FoodCandidate[] } | { status: 'error' }
 
 export function AddFoodSheet({ date, meal: initialMeal, mealNames, entry, onClose, onLogged }: Props) {
@@ -55,16 +58,33 @@ export function AddFoodSheet({ date, meal: initialMeal, mealNames, entry, onClos
     loadUsdaFoods().then(setUsda, () => setUsdaError(true))
   }, [query, usda, usdaError])
 
-  // A new search clears the previous online results.
+  // Search UK supermarket products as you type, once you pause. Results are kept per search.
   useEffect(() => {
     onlineAbort.current?.abort()
-    setOnline({ status: 'idle' })
+    const q = query.trim().toLowerCase()
+    if (q.length < MIN_ONLINE_QUERY) {
+      setOnline({ status: 'idle' })
+      return
+    }
+    const cached = onlineCache.get(q)
+    if (cached) {
+      setOnline({ status: 'done', results: cached })
+      return
+    }
+    setOnline({ status: 'loading' })
+    const timer = setTimeout(() => searchOnline(q), 700)
+    return () => clearTimeout(timer)
   }, [query])
 
   const results = useMemo(
-    () => (query.trim() && mine ? searchFoods(query, mine, usda ?? []) : []),
+    () => (query.trim() && mine ? searchFoods(query, mine, usda ?? [], 40) : []),
     [query, mine, usda],
   )
+  const yours = results.filter((f) => f.id !== undefined)
+  const generic = results.filter((f) => f.id === undefined).slice(0, 15)
+  // Hide supermarket products you've already saved; they show under "Your foods".
+  const savedOff = new Set((mine ?? []).filter((f) => f.source === 'off').map((f) => f.sourceId))
+  const products = online.status === 'done' ? online.results.filter((f) => !savedOff.has(f.sourceId)) : []
 
   const openFood = async (food: FoodCandidate) => {
     const saved =
@@ -77,13 +97,14 @@ export function AddFoodSheet({ date, meal: initialMeal, mealNames, entry, onClos
     setView({ kind: 'serving', food: saved ? foodToCandidate(saved) : food, last })
   }
 
-  const searchOnline = async () => {
+  async function searchOnline(q: string) {
     const controller = new AbortController()
     onlineAbort.current = controller
     setOnline({ status: 'loading' })
     try {
-      const found = await searchOpenFoodFacts(query.trim(), controller.signal)
-      setOnline({ status: 'done', results: found })
+      const found = await searchOpenFoodFacts(q, controller.signal)
+      onlineCache.set(q, found)
+      if (!controller.signal.aborted) setOnline({ status: 'done', results: found })
     } catch {
       if (!controller.signal.aborted) setOnline({ status: 'error' })
     }
@@ -202,42 +223,50 @@ export function AddFoodSheet({ date, meal: initialMeal, mealNames, entry, onClos
 
           {query.trim() && (
             <>
-              {usdaError && <p className="hint error">Couldn't load the food list. Check your connection and try again.</p>}
-              {results.length > 0 ? (
-                <div className="card list inset">
-                  {results.map((f) => (
-                    <FoodRow key={f.key} food={f} onPick={openFood} />
-                  ))}
-                </div>
-              ) : (
-                usda && <p className="hint">No matches in your foods or the USDA list.</p>
+              {yours.length > 0 && (
+                <>
+                  <h3 className="sheet-section">Your foods</h3>
+                  <div className="card list inset">
+                    {yours.map((f) => (
+                      <FoodRow key={f.key} food={f} onPick={openFood} />
+                    ))}
+                  </div>
+                </>
               )}
 
-              <h3 className="sheet-section">Packaged foods</h3>
-              {online.status === 'idle' && (
-                <button type="button" className="secondary-button" onClick={searchOnline}>
-                  Search Open Food Facts for “{query.trim()}”
-                </button>
-              )}
-              {online.status === 'loading' && <p className="hint">Searching Open Food Facts…</p>}
+              <h3 className="sheet-section">UK supermarkets</h3>
+              {online.status === 'idle' && <p className="hint">Keep typing to search UK supermarket products.</p>}
+              {online.status === 'loading' && <p className="hint">Searching UK products…</p>}
               {online.status === 'error' && (
                 <>
-                  <p className="hint error">Couldn't reach Open Food Facts. You may be offline, or it's busy.</p>
-                  <button type="button" className="secondary-button" onClick={searchOnline}>
+                  <p className="hint error">Couldn't search UK products. You may be offline, or the database is busy.</p>
+                  <button type="button" className="secondary-button" onClick={() => searchOnline(query.trim().toLowerCase())}>
                     Try again
                   </button>
                 </>
               )}
               {online.status === 'done' &&
-                (online.results.length ? (
+                (products.length ? (
                   <div className="card list inset">
-                    {online.results.map((f) => (
+                    {products.map((f) => (
                       <FoodRow key={f.key} food={f} onPick={openFood} />
                     ))}
                   </div>
                 ) : (
-                  <p className="hint">No packaged foods found.</p>
+                  <p className="hint">No UK products found. Try the brand or shop name, like “tesco hummus”.</p>
                 ))}
+
+              <h3 className="sheet-section">Fresh &amp; basic foods</h3>
+              {usdaError && <p className="hint error">Couldn't load the food list. Check your connection and try again.</p>}
+              {generic.length > 0 ? (
+                <div className="card list inset">
+                  {generic.map((f) => (
+                    <FoodRow key={f.key} food={f} onPick={openFood} />
+                  ))}
+                </div>
+              ) : (
+                usda && <p className="hint">No matches.</p>
+              )}
 
               <button type="button" className="link-button center-block" onClick={() => setView({ kind: 'custom' })}>
                 Can't find it? Create “{query.trim()}”
@@ -254,7 +283,7 @@ function FoodRow({ food, onPick }: { food: FoodCandidate; onPick: (f: FoodCandid
   const tag = food.source === 'custom' ? 'My food' : food.id !== undefined ? 'Used before' : null
   const basis = food.servingOnly
     ? `per ${food.servings[0]?.label ?? 'serving'}`
-    : food.servings[0]
+    : food.servings[0] && !/^[\d.]+\s*g$/i.test(food.servings[0].label)
       ? `per 100 g · ${food.servings[0].label} = ${fmt(food.servings[0].grams)} g`
       : 'per 100 g'
   return (
@@ -263,6 +292,7 @@ function FoodRow({ food, onPick }: { food: FoodCandidate; onPick: (f: FoodCandid
         <span className="entry-name">{food.name}</span>
         <span className="entry-macros muted">
           {food.brand ? `${food.brand} · ` : ''}
+          {food.stores ? `${food.stores.join(', ')} · ` : ''}
           {fmt(food.kcal)} kcal {basis}
           {tag ? ` · ${tag}` : ''}
         </span>
