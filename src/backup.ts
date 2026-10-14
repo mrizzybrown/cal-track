@@ -1,7 +1,8 @@
-import { db, type CalTrackDB, type Entry, type Food, type SavedMeal, type Settings, type Weight } from './db'
+import { db, type CalTrackDB, type Entry, type Food, type Lift, type LiftSet, type SavedMeal, type Settings, type Weight } from './db'
 
 export const BACKUP_APP = 'cal-track'
-export const BACKUP_VERSION = 1
+// v2 adds lifts and liftSets. v1 backups still restore (with no lifts).
+export const BACKUP_VERSION = 2
 
 export interface Backup {
   app: typeof BACKUP_APP
@@ -12,17 +13,32 @@ export interface Backup {
   savedMeals: SavedMeal[]
   weights: Weight[]
   settings: Settings[]
+  lifts?: Lift[]
+  liftSets?: LiftSet[]
 }
 
 export async function exportBackup(database: CalTrackDB = db): Promise<Backup> {
-  const [foods, entries, savedMeals, weights, settings] = await Promise.all([
+  const [foods, entries, savedMeals, weights, settings, lifts, liftSets] = await Promise.all([
     database.foods.toArray(),
     database.entries.toArray(),
     database.savedMeals.toArray(),
     database.weights.toArray(),
     database.settings.toArray(),
+    database.lifts.toArray(),
+    database.liftSets.toArray(),
   ])
-  return { app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: new Date().toISOString(), foods, entries, savedMeals, weights, settings }
+  return {
+    app: BACKUP_APP,
+    version: BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    foods,
+    entries,
+    savedMeals,
+    weights,
+    settings,
+    lifts,
+    liftSets,
+  }
 }
 
 /** File name like cal-track-backup-2026-10-14.json */
@@ -41,25 +57,38 @@ export function checkBackup(data: unknown): string | null {
   for (const key of ['foods', 'entries', 'savedMeals', 'weights', 'settings'] as const) {
     if (!isList(b[key])) return 'This backup is incomplete or damaged.'
   }
+  if (b.version >= 2 && (!isList(b.lifts) || !isList(b.liftSets))) return 'This backup is incomplete or damaged.'
+
   return null
 }
 
 export interface BackupCounts {
   entries: number
+  liftSets: number
   foods: number
   savedMeals: number
   weights: number
 }
 
 export function backupCounts(b: Backup): BackupCounts {
-  return { entries: b.entries.length, foods: b.foods.length, savedMeals: b.savedMeals.length, weights: b.weights.length }
+  return { entries: b.entries.length, liftSets: b.liftSets?.length ?? 0, foods: b.foods.length, savedMeals: b.savedMeals.length, weights: b.weights.length }
 }
+
+const allTables = (database: CalTrackDB) => [
+  database.foods,
+  database.entries,
+  database.savedMeals,
+  database.weights,
+  database.settings,
+  database.lifts,
+  database.liftSets,
+]
 
 /** Replaces everything on this phone with the backup's contents, all or nothing. */
 export async function restoreBackup(b: Backup, database: CalTrackDB = db): Promise<void> {
   const error = checkBackup(b)
   if (error) throw new Error(error)
-  const tables = [database.foods, database.entries, database.savedMeals, database.weights, database.settings]
+  const tables = allTables(database)
   await database.transaction('rw', tables, async () => {
     await Promise.all(tables.map((t) => t.clear()))
     await database.foods.bulkPut(b.foods)
@@ -67,12 +96,14 @@ export async function restoreBackup(b: Backup, database: CalTrackDB = db): Promi
     await database.savedMeals.bulkPut(b.savedMeals)
     await database.weights.bulkPut(b.weights)
     await database.settings.bulkPut(b.settings)
+    await database.lifts.bulkPut(b.lifts ?? [])
+    await database.liftSets.bulkPut(b.liftSets ?? [])
   })
 }
 
-/** Deletes all your logs, foods, meals, weights and settings. */
+/** Deletes all your logs, foods, meals, weights, lifts and settings. */
 export async function clearAllData(database: CalTrackDB = db): Promise<void> {
-  const tables = [database.foods, database.entries, database.savedMeals, database.weights, database.settings]
+  const tables = allTables(database)
   await database.transaction('rw', tables, () => Promise.all(tables.map((t) => t.clear())))
 }
 

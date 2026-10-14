@@ -79,6 +79,23 @@ export interface Weight {
 
 export type WeightUnit = 'kg' | 'lb'
 
+/** An exercise you track, like Squat. */
+export interface Lift {
+  id: number
+  name: string
+  createdAt: number
+}
+
+/** One logged set of a lift: weight × reps on a date. */
+export interface LiftSet {
+  id: number
+  liftId: number
+  date: string // YYYY-MM-DD
+  kg: number
+  reps: number
+  createdAt: number
+}
+
 export interface Settings {
   id: 'main'
   kcalTarget: number
@@ -106,6 +123,8 @@ export class CalTrackDB extends Dexie {
   entries!: EntityTable<Entry, 'id'>
   savedMeals!: EntityTable<SavedMeal, 'id'>
   weights!: EntityTable<Weight, 'date'>
+  lifts!: EntityTable<Lift, 'id'>
+  liftSets!: EntityTable<LiftSet, 'id'>
   settings!: EntityTable<Settings, 'id'>
 
   constructor(name = 'cal-track') {
@@ -120,6 +139,11 @@ export class CalTrackDB extends Dexie {
     // v2: saved meals store their items' nutrition directly and track use for sorting.
     this.version(2).stores({
       savedMeals: '++id, name, lastUsed, useCount',
+    })
+    // v3: gym lifts and their logged sets, for personal bests.
+    this.version(3).stores({
+      lifts: '++id, name',
+      liftSets: '++id, liftId, date',
     })
   }
 }

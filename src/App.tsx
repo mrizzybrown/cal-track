@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { TabBar, type Tab } from './components/TabBar'
 import { TodayScreen } from './screens/Today'
 import { WeightScreen } from './screens/Weight'
+import { LiftsScreen } from './screens/Lifts'
 import { HistoryScreen } from './screens/History'
 import { SettingsScreen } from './screens/Settings'
 import { requestPersistentStorage } from './db'
@@ -18,6 +19,7 @@ export function App() {
       <main className="screen">
         {tab === 'today' && <TodayScreen />}
         {tab === 'weight' && <WeightScreen />}
+        {tab === 'lifts' && <LiftsScreen />}
         {tab === 'history' && <HistoryScreen />}
         {tab === 'settings' && <SettingsScreen />}
       </main>

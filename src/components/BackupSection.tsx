@@ -113,8 +113,8 @@ export function BackupSection({ lastBackupAt }: { lastBackupAt?: string }) {
               Replace everything on this phone with the backup from {longDate(step.backup.exportedAt)}?
             </p>
             <p className="muted small">
-              It has {backupCounts(step.backup).entries} logged items, {backupCounts(step.backup).weights} weigh-ins and{' '}
-              {backupCounts(step.backup).savedMeals} saved meals. What's on this phone now will be lost.
+              It has {backupCounts(step.backup).entries} logged items, {backupCounts(step.backup).weights} weigh-ins,{' '}
+              {backupCounts(step.backup).savedMeals} saved meals and {backupCounts(step.backup).liftSets} lift sets. What's on this phone now will be lost.
             </p>
             <button type="button" className="danger-button" onClick={() => doImport(step.backup)} disabled={busy}>
               Replace with backup
@@ -129,7 +129,7 @@ export function BackupSection({ lastBackupAt }: { lastBackupAt?: string }) {
       <section className="card">
         {step.kind === 'confirm-clear' ? (
           <div role="alertdialog" aria-label="Delete all data">
-            <p>Delete all your logs, foods, meals, weigh-ins and settings?</p>
+            <p>Delete all your logs, foods, meals, weigh-ins, lifts and settings?</p>
             <p className="muted small">This can’t be undone. Export a backup first if you might want them.</p>
             <button type="button" className="danger-button" onClick={doClear} disabled={busy}>
               Delete everything
