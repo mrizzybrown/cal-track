@@ -266,7 +266,7 @@ input {
   right: 0;
   bottom: 0;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--tabbar-bg);
@@ -835,7 +835,7 @@ input {
 
 /* Fast logging */
 .segmented.four {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   margin-top: var(--space-4);
 }
 
@@ -1141,4 +1141,145 @@ input[type='date'] {
 
 .sheet:focus {
   outline: none;
+}
+
+/* Lifts */
+.inline-form {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-bottom: var(--space-3);
+}
+
+.inline-form input {
+  flex: 1;
+  min-width: 0;
+  min-height: 50px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 17px;
+}
+
+.inline-form input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+.inline-form .secondary-button {
+  width: auto;
+  margin-top: 0;
+  padding: 0 var(--space-4);
+}
+
+.inline-form.rename {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.row-chevron {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pb-value {
+  font-weight: 600;
+}
+
+.lift-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.screen-header .lift-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 28px;
+  overflow-wrap: anywhere;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.field-row .field {
+  border-top: 0;
+}
+
+.field-row .input-wrap input {
+  flex: 1;
+  min-width: 0;
+}
+
+.field-row + .field-error {
+  margin-top: var(--space-2);
+}
+
+.set-result {
+  margin: 0;
+  padding: var(--space-2) 0 var(--space-4);
+  text-align: center;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.set-result.pb {
+  color: var(--accent);
+}
+
+.lift-form .primary-button:last-child {
+  margin-bottom: var(--space-4);
+}
+
+.chart .pb-dot {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 1.5;
+}
+
+.chart .set-dot {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.key-dot.pb {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+}
+
+.key-dot.set {
+  width: 8px;
+  height: 8px;
+  margin-left: var(--space-2);
+  background: transparent;
+  border: 2px solid var(--accent);
+}
+
+.pb-badge {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: 2px;
+}
+
+.lift-actions {
+  margin-top: var(--space-5, 24px);
 }
