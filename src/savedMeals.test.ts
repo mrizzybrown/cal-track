@@ -3,7 +3,15 @@ import Dexie from 'dexie'
 import { describe, expect, it } from 'vitest'
 import { CalTrackDB } from './db'
 import { addQuickEntry, entriesForDate } from './entries'
-import { copyMealFromDay, createSavedMeal, listSavedMeals, logSavedMeal, mealTotals, saveEntriesAsMeal } from './savedMeals'
+import {
+  copyMealFromDay,
+  createSavedMeal,
+  listSavedMeals,
+  logSavedMeal,
+  mealTotals,
+  pastMeals,
+  saveEntriesAsMeal,
+} from './savedMeals'
 
 const blank = { name: '', kcal: null, protein: null, carbs: null, fat: null }
 const item = (name: string, kcal: number, protein = 0) => ({ name, amount: 1, unit: 'serving', kcal, protein, carbs: 0, fat: 0 })
@@ -55,11 +63,37 @@ describe('saved meals', () => {
     const db = new CalTrackDB('sm-copy')
     await addQuickEntry('2026-10-13', 1, { ...blank, name: 'Wrap', kcal: 500 }, db)
     await addQuickEntry('2026-10-13', 2, { ...blank, name: 'Pasta', kcal: 700 }, db)
-    expect(await copyMealFromDay('2026-10-13', '2026-10-14', 1, db)).toBe(1)
+    expect(await copyMealFromDay('2026-10-13', '2026-10-14', 1, db)).toHaveLength(1)
     const today = await entriesForDate('2026-10-14', db)
     expect(today).toHaveLength(1)
     expect(today[0]).toMatchObject({ name: 'Wrap', meal: 1 })
     expect(await entriesForDate('2026-10-13', db)).toHaveLength(2)
+  })
+
+  it('copies a past meal into a different meal', async () => {
+    const db = new CalTrackDB('sm-copy-slot')
+    await addQuickEntry('2026-10-10', 0, { ...blank, name: 'Eggs', kcal: 200 }, db)
+    await copyMealFromDay('2026-10-10', '2026-10-14', 0, db, 3)
+    expect((await entriesForDate('2026-10-14', db))[0]).toMatchObject({ name: 'Eggs', meal: 3 })
+  })
+
+  it('lists past meals newest first, once per repeat, within two weeks', async () => {
+    const db = new CalTrackDB('sm-past')
+    for (const [date, name] of [
+      ['2026-09-20', 'Old'],
+      ['2026-10-11', 'Oats'],
+      ['2026-10-12', 'Eggs'],
+      ['2026-10-13', 'Oats'],
+    ])
+      await addQuickEntry(date, 0, { ...blank, name, kcal: 300 }, db)
+    await addQuickEntry('2026-10-13', 1, { ...blank, name: 'Wrap', kcal: 500 }, db)
+    await addQuickEntry('2026-10-14', 0, { ...blank, name: 'Today', kcal: 100 }, db)
+    const past = await pastMeals('2026-10-14', 0, 14, db)
+    expect(past.map((p) => [p.date, p.entries[0].name])).toEqual([
+      ['2026-10-13', 'Oats'],
+      ['2026-10-12', 'Eggs'],
+    ])
+    expect(past[0].totals.kcal).toBe(300)
   })
 })
 

@@ -107,3 +107,12 @@ export function parseOptional(input: string): number | null | 'invalid' {
   if (!Number.isFinite(n) || n < 0 || n > 20000) return 'invalid'
   return Math.round(n * 10) / 10
 }
+
+/** "Today", "Yesterday", "Tomorrow", or a short date like "Tue 12 Oct". */
+export function dateLabel(key: string, today: string): string {
+  if (key === today) return 'Today'
+  if (key === shiftDateKey(today, -1)) return 'Yesterday'
+  if (key === shiftDateKey(today, 1)) return 'Tomorrow'
+  const [y, m, d] = key.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+}

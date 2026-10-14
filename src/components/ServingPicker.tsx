@@ -1,7 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { db, type Entry, type MealIndex } from '../db'
 import { parseOptional } from '../entries'
-import { defaultPortion, entryName, logFood, nutritionFor, unitsFor, updateFoodEntry, type FoodCandidate } from '../foods'
+import {
+  defaultPortion,
+  entryName,
+  logFood,
+  nutritionFor,
+  setFavorite,
+  unitsFor,
+  updateFoodEntry,
+  type FoodCandidate,
+} from '../foods'
 import { saveEntriesAsMeal } from '../savedMeals'
 
 const fmt = (n: number) => Math.round(n).toLocaleString()
@@ -27,6 +36,23 @@ export function ServingPicker({ food, date, meal, mealName, entry, last, onDone,
   const [unit, setUnit] = useState(units.includes(start.unit) ? start.unit : units[0])
   const [showError, setShowError] = useState(false)
   const [savedNote, setSavedNote] = useState('')
+  const [favorite, setFav] = useState(false)
+
+  useEffect(() => {
+    const lookup =
+      food.id !== undefined
+        ? db.foods.get(food.id)
+        : food.sourceId
+          ? db.foods.where('[source+sourceId]').equals([food.source, food.sourceId]).first()
+          : Promise.resolve(undefined)
+    lookup.then((f) => setFav(f?.favorite === 1))
+  }, [food])
+
+  const toggleFavorite = async () => {
+    const next = !favorite
+    setFav(next)
+    await setFavorite(food, next)
+  }
 
   const parsed = parseOptional(amountText)
   const amount = typeof parsed === 'number' && parsed > 0 ? parsed : null
@@ -68,7 +94,20 @@ export function ServingPicker({ food, date, meal, mealName, entry, last, onDone,
       }}
     >
       <div className="card food-head inset">
-        <p className="food-title">{entryName(food)}</p>
+        <div className="food-title-row">
+          <p className="food-title">{entryName(food)}</p>
+          <button
+            type="button"
+            className={favorite ? 'star-button on' : 'star-button'}
+            aria-pressed={favorite}
+            aria-label={favorite ? 'Remove from favourites' : 'Add to favourites'}
+            onClick={toggleFavorite}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3.5l2.6 5.3 5.9.9-4.25 4.1 1 5.85L12 16.9l-5.25 2.75 1-5.85L3.5 9.7l5.9-.9z" />
+            </svg>
+          </button>
+        </div>
         <p className="muted small">
           {food.servingOnly
             ? `Per ${food.servings[0]?.label ?? 'serving'}: ${fmt(food.kcal)} kcal`

@@ -4,6 +4,11 @@ import { CalTrackDB } from './db'
 import { entriesForDate } from './entries'
 import {
   createCustomFood,
+  favoriteFoods,
+  recentFoods,
+  relogFood,
+  setFavorite,
+  usualPortion,
   defaultPortion,
   foodToCandidate,
   gramsFor,
@@ -160,5 +165,27 @@ describe('generic food list', () => {
     expect(keepRow('KFC, Fried Chicken, Drumstick')).toBe(false)
     expect(keepRow('Cereals ready-to-eat, QUAKER, oat squares')).toBe(false)
     expect(keepRow('Fast foods, hamburger, single, regular patty, plain')).toBe(false)
+  })
+})
+
+describe('fast logging', () => {
+  it('lists recent foods newest first and re-logs the usual portion', async () => {
+    const db = new CalTrackDB('foods-recent')
+    await logFood(egg, 2, 'oz', '2026-10-13', 0, db)
+    await logFood(banana, 120, 'g', '2026-10-13', 0, db)
+    const recent = await recentFoods(20, db)
+    expect(recent.map((f) => f.name)).toEqual(['Bananas, raw', 'Egg, whole, raw, fresh'])
+    expect(usualPortion(recent[0])).toEqual({ amount: 120, unit: 'g' })
+    await relogFood(recent[0], '2026-10-14', 1, db)
+    const today = await entriesForDate('2026-10-14', db)
+    expect(today[0]).toMatchObject({ name: 'Bananas, raw', amount: 120, unit: 'g', kcal: 107, meal: 1 })
+  })
+
+  it('stars a food from search and unstars it', async () => {
+    const db = new CalTrackDB('foods-fav')
+    const id = await setFavorite(banana, true, db)
+    expect((await favoriteFoods(db)).map((f) => f.id)).toEqual([id])
+    await setFavorite({ ...banana, id }, false, db)
+    expect(await favoriteFoods(db)).toEqual([])
   })
 })
