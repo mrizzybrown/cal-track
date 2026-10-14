@@ -44,10 +44,27 @@ export interface Entry {
   createdAt: number
 }
 
+/** One item inside a saved meal. Nutrition is stored as logged, so it re-logs exactly. */
+export interface SavedMealItem {
+  name: string
+  foodId?: number
+  amount: number
+  unit: string
+  grams?: number
+  kcal: number
+  protein: number
+  carbs: number
+  fat: number
+}
+
+/** A meal you eat often, logged again in one tap. */
 export interface SavedMeal {
   id: number
   name: string
-  items: { foodId: number; amount: number; unit: string; grams: number }[]
+  items: SavedMealItem[]
+  lastUsed?: number
+  useCount: number
+  createdAt: number
 }
 
 export interface Weight {
@@ -92,6 +109,10 @@ export class CalTrackDB extends Dexie {
       savedMeals: '++id, name',
       weights: 'date',
       settings: 'id',
+    })
+    // v2: saved meals store their items' nutrition directly and track use for sorting.
+    this.version(2).stores({
+      savedMeals: '++id, name, lastUsed, useCount',
     })
   }
 }

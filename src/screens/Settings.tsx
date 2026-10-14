@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { getSettings, saveSettings, type Settings, type WeightUnit } from '../db'
 import { kcalFromMacros, parseTarget } from '../units'
+import { listSavedMeals, mealTotals } from '../savedMeals'
+import { EditSavedMealSheet } from '../components/EditSavedMealSheet'
+import type { SavedMeal } from '../db'
 
 type TargetKey = 'kcalTarget' | 'proteinTarget' | 'carbsTarget' | 'fatTarget'
 
@@ -65,6 +68,8 @@ export function SettingsScreen() {
           <MealNameField key={i} index={i} value={name} settings={settings} />
         ))}
       </section>
+
+      <SavedMealsSection />
 
       <h2 className="section-title">Your data</h2>
       <section className="card">
@@ -162,5 +167,42 @@ function MealNameField({ index, value, settings }: { index: number; value: strin
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       />
     </div>
+  )
+}
+
+function SavedMealsSection() {
+  const meals = useLiveQuery(() => listSavedMeals(), [])
+  const [editing, setEditing] = useState<SavedMeal | null>(null)
+  if (!meals) return null
+
+  return (
+    <>
+      <h2 className="section-title">My meals</h2>
+      {meals.length === 0 ? (
+        <p className="hint">
+          No saved meals yet. Tick “Also save to My Meals” when you quick add, or tap “Save to My Meals” under a
+          meal on Today.
+        </p>
+      ) : (
+        <section className="card list">
+          {meals.map((m) => {
+            const t = mealTotals(m)
+            return (
+              <button key={m.id} type="button" className="list-row" onClick={() => setEditing(m)}>
+                <span className="list-main">
+                  <span className="entry-name">{m.name}</span>
+                  <span className="entry-macros muted">
+                    P {Math.round(t.protein)} · C {Math.round(t.carbs)} · F {Math.round(t.fat)}
+                    {m.items.length > 1 ? ` · ${m.items.length} items` : ''}
+                  </span>
+                </span>
+                <span className="entry-kcal">{Math.round(t.kcal).toLocaleString()}</span>
+              </button>
+            )
+          })}
+        </section>
+      )}
+      {editing && <EditSavedMealSheet meal={editing} onClose={() => setEditing(null)} />}
+    </>
   )
 }
