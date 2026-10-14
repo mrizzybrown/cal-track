@@ -20,9 +20,14 @@ export interface Food {
   carbs: number
   fat: number
   servings: ServingSize[]
+  /** Custom food entered per serving without a weight: values are per serving, log in servings only. */
+  servingOnly?: boolean
   favorite: 0 | 1
   lastUsed?: number
   useCount: number
+  /** The amount and unit you last logged, used as the default next time. */
+  lastAmount?: number
+  lastUnit?: string
 }
 
 export type MealIndex = 0 | 1 | 2 | 3

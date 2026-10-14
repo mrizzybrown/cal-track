@@ -4,7 +4,18 @@ import { useEffect, useRef, type ReactNode } from 'react'
  * A panel pinned near the top of the screen so the iOS keyboard never covers it.
  * Closes on backdrop tap or Escape and returns focus to whatever opened it.
  */
-export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Sheet({
+  title,
+  onClose,
+  onBack,
+  children,
+}: {
+  title: string
+  onClose: () => void
+  /** Shows a Back button instead of Cancel. */
+  onBack?: () => void
+  children: ReactNode
+}) {
   const close = useRef(onClose)
   close.current = onClose
 
@@ -25,9 +36,15 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title}>
         <div className="sheet-header">
           <h2>{title}</h2>
-          <button type="button" className="text-button" onClick={onClose}>
-            Cancel
-          </button>
+          {onBack ? (
+            <button type="button" className="text-button" onClick={onBack}>
+              Back
+            </button>
+          ) : (
+            <button type="button" className="text-button" onClick={onClose}>
+              Cancel
+            </button>
+          )}
         </div>
         {children}
       </div>

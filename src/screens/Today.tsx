@@ -4,7 +4,7 @@ import { db, getSettings, type Entry, type MealIndex } from '../db'
 import { entriesForDate, mealForTime, shiftDateKey, sumTotals } from '../entries'
 import { copyMealFromDay } from '../savedMeals'
 import { localDateKey } from '../units'
-import { QuickAddSheet } from '../components/QuickAddSheet'
+import { AddFoodSheet } from '../components/AddFoodSheet'
 import { SaveMealSheet } from '../components/SaveMealSheet'
 import { Toast, type ToastState } from '../components/Toast'
 
@@ -165,7 +165,7 @@ export function TodayScreen() {
       </button>
 
       {sheet && (
-        <QuickAddSheet
+        <AddFoodSheet
           date={date}
           meal={sheet.meal}
           entry={sheet.entry}
