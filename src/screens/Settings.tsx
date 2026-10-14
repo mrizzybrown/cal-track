@@ -4,6 +4,7 @@ import { getSettings, saveSettings, type Settings, type WeightUnit } from '../db
 import { kcalFromMacros, parseTarget } from '../units'
 import { listSavedMeals, mealTotals } from '../savedMeals'
 import { EditSavedMealSheet } from '../components/EditSavedMealSheet'
+import { BackupSection } from '../components/BackupSection'
 import type { SavedMeal } from '../db'
 
 type TargetKey = 'kcalTarget' | 'proteinTarget' | 'carbsTarget' | 'fatTarget'
@@ -79,8 +80,8 @@ export function SettingsScreen() {
             ? 'Protected storage is on, so iOS will not clear it to free space.'
             : 'Protected storage is not on yet. It usually turns on once Cal Track is opened from the Home Screen.'}
         </p>
-        <p className="muted small">Backup export and import come in a later update.</p>
       </section>
+      <BackupSection lastBackupAt={settings.lastBackupAt} />
 
       <p className="hint credits">
         Food data: USDA FoodData Central (SR Legacy), via the TempoLife food dataset (tempolife.app), CC-BY-4.0.

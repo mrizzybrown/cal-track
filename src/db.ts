@@ -87,6 +87,8 @@ export interface Settings {
   fatTarget: number
   weightUnit: WeightUnit
   mealNames: [string, string, string, string]
+  /** When a backup was last exported from this phone (ISO time). */
+  lastBackupAt?: string
 }
 
 export const DEFAULT_SETTINGS: Settings = {
