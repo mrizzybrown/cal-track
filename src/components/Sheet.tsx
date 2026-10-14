@@ -1,8 +1,10 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 /**
  * A panel pinned near the top of the screen so the iOS keyboard never covers it.
- * Closes on backdrop tap or Escape and returns focus to whatever opened it.
+ * Closes on backdrop tap or Escape and returns focus to whatever opened it. While open, the rest of
+ * the app is inert, so taps and screen readers stay inside the sheet.
  */
 export function Sheet({
   title,
@@ -16,6 +18,7 @@ export function Sheet({
   onBack?: () => void
   children: ReactNode
 }) {
+  const panel = useRef<HTMLDivElement>(null)
   const close = useRef(onClose)
   close.current = onClose
 
@@ -24,16 +27,20 @@ export function Sheet({
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close.current()
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
+    const app = document.getElementById('root')
+    app?.setAttribute('inert', '')
+    if (!panel.current?.contains(document.activeElement)) panel.current?.focus({ preventScroll: true })
     return () => {
+      app?.removeAttribute('inert')
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
       opener?.focus?.()
     }
   }, [])
 
-  return (
+  return createPortal(
     <div className="sheet-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="sheet" role="dialog" aria-modal="true" aria-label={title}>
+      <div ref={panel} tabIndex={-1} className="sheet" role="dialog" aria-modal="true" aria-label={title}>
         <div className="sheet-header">
           <h2>{title}</h2>
           {onBack ? (
@@ -48,6 +55,7 @@ export function Sheet({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
