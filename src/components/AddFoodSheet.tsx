@@ -288,7 +288,7 @@ export function AddFoodSheet({ date, meal: initialMeal, mealNames, entry, onClos
                 </button>
                 <button type="button" className="action-tile" onClick={() => setView({ kind: 'custom' })}>
                   New food
-                  <span className="muted small">From a label</span>
+                  <span className="muted small">From label</span>
                 </button>
               </div>
 
