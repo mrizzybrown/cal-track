@@ -919,3 +919,48 @@ input {
   fill: var(--star, #e8a400);
   stroke: var(--star, #e8a400);
 }
+
+/* Barcode scanner */
+.action-row.three {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.scanner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.camera-box {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  border-radius: 14px;
+  background: #000;
+}
+
+.camera-box video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scan-guide {
+  position: absolute;
+  inset: 30% 10%;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.35);
+}
+
+.camera-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: var(--space-4);
+  color: #fff;
+  text-align: center;
+}
