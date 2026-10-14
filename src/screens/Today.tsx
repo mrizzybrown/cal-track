@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, getSettings, type Entry, type MealIndex } from '../db'
-import { entriesForDate, mealForTime, shiftDateKey, sumTotals } from '../entries'
+import { dateLabel, entriesForDate, mealForTime, shiftDateKey, sumTotals } from '../entries'
 import { copyMealFromDay } from '../savedMeals'
 import { localDateKey } from '../units'
 import { AddFoodSheet } from '../components/AddFoodSheet'
@@ -15,14 +15,6 @@ const MACROS = [
 ] as const
 
 type SheetState = { meal: MealIndex; entry?: Entry } | null
-
-function dateLabel(key: string, today: string): string {
-  if (key === today) return 'Today'
-  if (key === shiftDateKey(today, -1)) return 'Yesterday'
-  if (key === shiftDateKey(today, 1)) return 'Tomorrow'
-  const [y, m, d] = key.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
-}
 
 const fmt = (n: number) => Math.round(n).toLocaleString()
 
@@ -46,15 +38,11 @@ export function TodayScreen() {
     setToast({ message: `Logged ${label}`, undo: () => db.entries.bulkDelete(ids) })
 
   const copyPrevious = async (meal: MealIndex, name: string) => {
-    const before = await db.entries.where('date').equals(date).primaryKeys()
-    const count = await copyMealFromDay(previousDay, date, meal)
-    if (!count) return
+    const ids = await copyMealFromDay(previousDay, date, meal)
+    if (!ids.length) return
     setToast({
       message: `Copied ${name} from ${dateLabel(previousDay, today).toLowerCase()}`,
-      undo: async () => {
-        const after = await db.entries.where('[date+meal]').equals([date, meal]).primaryKeys()
-        await db.entries.bulkDelete(after.filter((id) => !before.includes(id)))
-      },
+      undo: () => db.entries.bulkDelete(ids),
     })
   }
 

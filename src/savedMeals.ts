@@ -1,5 +1,5 @@
 import { db, type CalTrackDB, type Entry, type MealIndex, type SavedMeal, type SavedMealItem } from './db'
-import { sumTotals, type Totals } from './entries'
+import { shiftDateKey, sumTotals, type Totals } from './entries'
 
 export function mealTotals(meal: Pick<SavedMeal, 'items'>): Totals {
   return sumTotals(meal.items)
@@ -80,17 +80,51 @@ export async function logSavedMeal(
   })
 }
 
-/** Copies one meal slot from another day (e.g. yesterday's breakfast) into a date. */
+/** Copies one meal slot from another day (e.g. yesterday's breakfast) into a date, optionally into a different meal. */
 export async function copyMealFromDay(
   fromDate: string,
   toDate: string,
   slot: MealIndex,
   database: CalTrackDB = db,
-): Promise<number> {
+  toSlot: MealIndex = slot,
+): Promise<number[]> {
   const source = await database.entries.where('[date+meal]').equals([fromDate, slot]).sortBy('createdAt')
   const now = Date.now()
-  await database.entries.bulkAdd(
-    source.map(({ id: _id, ...rest }, i) => ({ ...rest, date: toDate, createdAt: now + i }) as Entry),
-  )
-  return source.length
+  return (await database.entries.bulkAdd(
+    source.map(({ id: _id, ...rest }, i) => ({ ...rest, date: toDate, meal: toSlot, createdAt: now + i }) as Entry),
+    { allKeys: true },
+  )) as number[]
+}
+
+export interface PastMeal {
+  date: string
+  meal: MealIndex
+  entries: Entry[]
+  totals: Totals
+}
+
+/**
+ * Meals you logged in this slot on earlier days, newest first, for copying. Repeats of the same
+ * meal (same foods and amounts) show once, as the most recent.
+ */
+export async function pastMeals(
+  beforeDate: string,
+  slot: MealIndex,
+  days = 14,
+  database: CalTrackDB = db,
+): Promise<PastMeal[]> {
+  const from = shiftDateKey(beforeDate, -days)
+  const rows = await database.entries.where('date').between(from, beforeDate, true, false).toArray()
+  const byDate = new Map<string, Entry[]>()
+  for (const e of rows) if (e.meal === slot) byDate.set(e.date, [...(byDate.get(e.date) ?? []), e])
+  const seen = new Set<string>()
+  const out: PastMeal[] = []
+  for (const date of [...byDate.keys()].sort().reverse()) {
+    const entries = byDate.get(date)!.sort((a, b) => a.createdAt - b.createdAt)
+    const sig = entries.map((e) => `${e.name}|${e.amount}|${e.unit}`).sort().join(';')
+    if (seen.has(sig)) continue
+    seen.add(sig)
+    out.push({ date, meal: slot, entries, totals: sumTotals(entries) })
+  }
+  return out
 }

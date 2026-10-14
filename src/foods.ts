@@ -368,3 +368,35 @@ export async function myFoods(database: CalTrackDB = db): Promise<FoodCandidate[
   const all = await database.foods.toArray()
   return all.sort((a, b) => b.useCount - a.useCount).map(foodToCandidate)
 }
+
+// ---------- Fast logging ----------
+
+/** Foods you've logged, most recent first. */
+export async function recentFoods(limit = 20, database: CalTrackDB = db): Promise<Food[]> {
+  return database.foods.orderBy('lastUsed').reverse().limit(limit).toArray()
+}
+
+/** Your starred foods, A to Z. */
+export async function favoriteFoods(database: CalTrackDB = db): Promise<Food[]> {
+  const list = await database.foods.where('favorite').equals(1).toArray()
+  return list.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** Stars or unstars a food, saving it first if it came from search. Returns the food's id. */
+export async function setFavorite(c: FoodCandidate, favorite: boolean, database: CalTrackDB = db): Promise<number> {
+  const id = await ensureFood(c, database)
+  await database.foods.update(id, { favorite: favorite ? 1 : 0 })
+  return id
+}
+
+/** The amount a one-tap log uses: what you had last time, else one serving, else 100 g. */
+export function usualPortion(f: Food): { amount: number; unit: string } {
+  const last = f.lastAmount && f.lastUnit ? { amount: f.lastAmount, unit: f.lastUnit } : undefined
+  return defaultPortion(foodToCandidate(f), last)
+}
+
+/** Logs a saved food in one tap at its usual portion. Returns the new entry id. */
+export async function relogFood(f: Food, date: string, meal: MealIndex, database: CalTrackDB = db): Promise<number> {
+  const { amount, unit } = usualPortion(f)
+  return logFood(foodToCandidate(f), amount, unit, date, meal, database)
+}

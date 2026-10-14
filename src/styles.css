@@ -827,3 +827,95 @@ input {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* Fast logging */
+.segmented.four {
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: var(--space-4);
+}
+
+.segmented.four .seg {
+  font-size: 13px;
+  padding: 0 2px;
+  color: var(--text);
+}
+
+.row-open {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row-open .entry-name,
+.list-main .clamp {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.list-row .log-pill,
+.undo-pill {
+  flex: none;
+  min-width: 64px;
+  min-height: 36px;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.undo-pill {
+  padding: 6px 12px;
+  border-radius: 14px;
+  background: var(--bg);
+  color: var(--accent);
+}
+
+.star-mark {
+  color: var(--star, #e8a400);
+}
+
+.food-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.food-title-row .food-title {
+  flex: 1;
+}
+
+.star-button {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin: -8px -10px -8px 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.star-button svg {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+
+.star-button.on svg {
+  fill: var(--star, #e8a400);
+  stroke: var(--star, #e8a400);
+}

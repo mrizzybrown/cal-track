@@ -1,8 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, type Entry, type MealIndex, type SavedMeal } from '../db'
-import { foodToCandidate, loadUsdaFoods, myFoods, searchFoods, searchOpenFoodFacts, type FoodCandidate } from '../foods'
-import { listSavedMeals, logSavedMeal, mealTotals } from '../savedMeals'
+import { db, type Entry, type Food, type MealIndex, type SavedMeal } from '../db'
+import { dateLabel } from '../entries'
+import { localDateKey } from '../units'
+import {
+  favoriteFoods,
+  foodToCandidate,
+  loadUsdaFoods,
+  myFoods,
+  recentFoods,
+  relogFood,
+  searchFoods,
+  searchOpenFoodFacts,
+  usualPortion,
+  entryName,
+  nutritionFor,
+  type FoodCandidate,
+} from '../foods'
+import { copyMealFromDay, listSavedMeals, logSavedMeal, mealTotals, pastMeals, type PastMeal } from '../savedMeals'
 import { CustomFoodForm } from './CustomFoodForm'
 import { QuickAddForm } from './QuickAddForm'
 import { ServingPicker } from './ServingPicker'
@@ -26,6 +41,14 @@ interface Props {
   onLogged?: (ids: number[], label: string) => void
 }
 
+type ListKey = 'recent' | 'favs' | 'meals' | 'past'
+const LISTS: { key: ListKey; label: string }[] = [
+  { key: 'recent', label: 'Recent' },
+  { key: 'favs', label: 'Favourites' },
+  { key: 'meals', label: 'My meals' },
+  { key: 'past', label: 'Past days' },
+]
+
 const MIN_ONLINE_QUERY = 3
 const onlineCache = new Map<string, FoodCandidate[]>()
 
@@ -42,6 +65,14 @@ export function AddFoodSheet({ date, meal: initialMeal, mealNames, entry, onClos
 
   const savedMeals = useLiveQuery(() => listSavedMeals(), [])
   const mine = useLiveQuery(() => myFoods(), [])
+  const recent = useLiveQuery(() => recentFoods(), [])
+  const favorites = useLiveQuery(() => favoriteFoods(), [])
+  const past = useLiveQuery(() => pastMeals(date, meal), [date, meal])
+  const [chosenList, setList] = useState<ListKey | null>(null)
+  // Items added with one tap while the sheet is open, so each can be undone.
+  const [added, setAdded] = useState<Map<string, number[]>>(new Map())
+  const today = localDateKey()
+  const list: ListKey = chosenList ?? (recent?.length || !savedMeals?.length ? 'recent' : 'meals')
 
   // Editing a logged food: open its serving picker once the food loads.
   useEffect(() => {
@@ -108,6 +139,27 @@ export function AddFoodSheet({ date, meal: initialMeal, mealNames, entry, onClos
     } catch {
       if (!controller.signal.aborted) setOnline({ status: 'error' })
     }
+  }
+
+  const openSaved = (f: Food) => {
+    const last = f.lastAmount && f.lastUnit ? { amount: f.lastAmount, unit: f.lastUnit } : undefined
+    setView({ kind: 'serving', food: foodToCandidate(f), last })
+  }
+
+  const markAdded = (key: string, ids: number[]) => setAdded((m) => new Map(m).set(key, ids))
+
+  const addFood = async (f: Food) => markAdded(`f${f.id}`, [await relogFood(f, date, meal)])
+
+  const copyPast = async (p: PastMeal) => markAdded(`p${p.date}`, await copyMealFromDay(p.date, date, p.meal, db, meal))
+
+  const undoAdd = async (key: string) => {
+    const ids = added.get(key)
+    if (ids) await db.entries.bulkDelete(ids)
+    setAdded((m) => {
+      const next = new Map(m)
+      next.delete(key)
+      return next
+    })
   }
 
   const logMeal = async (m: SavedMeal) => {
@@ -195,9 +247,45 @@ export function AddFoodSheet({ date, meal: initialMeal, mealNames, entry, onClos
                 </button>
               </div>
 
-              {savedMeals && savedMeals.length > 0 && (
-                <>
-                  <h3 className="sheet-section">My meals</h3>
+              <div className="segmented four" role="tablist" aria-label="Lists">
+                {LISTS.map((l) => (
+                  <button
+                    key={l.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={list === l.key}
+                    className={list === l.key ? 'seg active' : 'seg'}
+                    onClick={() => setList(l.key)}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+
+              {list === 'recent' &&
+                (recent?.length ? (
+                  <div className="card list inset">
+                    {recent.map((f) => (
+                      <QuickFoodRow key={f.id} food={f} added={added.get(`f${f.id}`)} onOpen={openSaved} onAdd={addFood} onUndo={undoAdd} />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="hint">Foods you log show here, ready to add again in one tap.</p>
+                ))}
+
+              {list === 'favs' &&
+                (favorites?.length ? (
+                  <div className="card list inset">
+                    {favorites.map((f) => (
+                      <QuickFoodRow key={f.id} food={f} added={added.get(`f${f.id}`)} onOpen={openSaved} onAdd={addFood} onUndo={undoAdd} />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="hint">Tap the star on a food to keep it here.</p>
+                ))}
+
+              {list === 'meals' &&
+                (savedMeals?.length ? (
                   <div className="card list inset">
                     {savedMeals.map((m) => {
                       const t = mealTotals(m)
@@ -216,7 +304,49 @@ export function AddFoodSheet({ date, meal: initialMeal, mealNames, entry, onClos
                       )
                     })}
                   </div>
-                </>
+                ) : (
+                  <p className="hint">Save a meal you eat often from its card on Today, then log it here in one tap.</p>
+                ))}
+
+              {list === 'past' &&
+                (past?.length ? (
+                  <div className="card list inset">
+                    {past.map((p) => {
+                      const key = `p${p.date}`
+                      const done = added.get(key)
+                      return (
+                        <div key={p.date} className="list-row">
+                          <span className="list-main">
+                            <span className="entry-name">{dateLabel(p.date, today)}</span>
+                            <span className="entry-macros muted clamp">{p.entries.map((e) => e.name).join(', ')}</span>
+                          </span>
+                          <span className="entry-kcal">{fmt(p.totals.kcal)}</span>
+                          {done ? (
+                            <button type="button" className="undo-pill" onClick={() => undoAdd(key)}>
+                              Undo
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="log-pill"
+                              aria-label={`Copy ${dateLabel(p.date, today)}'s ${mealNames[p.meal]}`}
+                              onClick={() => copyPast(p)}
+                            >
+                              Copy
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="hint">No {mealNames[meal].toLowerCase()} logged in the last two weeks.</p>
+                ))}
+
+              {added.size > 0 && (
+                <button type="button" className="primary-button" onClick={onClose}>
+                  Done
+                </button>
               )}
             </>
           )}
@@ -298,5 +428,42 @@ function FoodRow({ food, onPick }: { food: FoodCandidate; onPick: (f: FoodCandid
         </span>
       </span>
     </button>
+  )
+}
+
+interface QuickFoodRowProps {
+  food: Food
+  added?: number[]
+  onOpen: (f: Food) => void
+  onAdd: (f: Food) => void
+  onUndo: (key: string) => void
+}
+
+/** A saved food: tap the name to choose an amount, or Add to log your usual portion. */
+function QuickFoodRow({ food, added, onOpen, onAdd, onUndo }: QuickFoodRowProps) {
+  const portion = usualPortion(food)
+  const n = nutritionFor(foodToCandidate(food), portion.amount, portion.unit)
+  const amount = portion.unit === 'g' || portion.unit === 'oz' ? `${fmt(portion.amount)} ${portion.unit}` : `${portion.amount} × ${portion.unit}`
+  return (
+    <div className="list-row">
+      <button type="button" className="row-open" onClick={() => onOpen(food)}>
+        <span className="entry-name">
+          {food.favorite ? <span className="star-mark" aria-label="Favourite">★ </span> : null}
+          {entryName(food)}
+        </span>
+        <span className="entry-macros muted">
+          {amount} · {fmt(n.kcal)} kcal
+        </span>
+      </button>
+      {added ? (
+        <button type="button" className="undo-pill" onClick={() => onUndo(`f${food.id}`)}>
+          Undo
+        </button>
+      ) : (
+        <button type="button" className="log-pill" aria-label={`Add ${amount} ${food.name}`} onClick={() => onAdd(food)}>
+          Add
+        </button>
+      )}
+    </div>
   )
 }
