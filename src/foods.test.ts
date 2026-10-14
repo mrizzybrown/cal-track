@@ -12,6 +12,9 @@ import {
   myFoods,
   nutritionFor,
   offToCandidate,
+  openFoodFactsUrl,
+  rankUkProducts,
+  ukStores,
   searchFoods,
   unitsFor,
   updateFoodEntry,
@@ -127,5 +130,35 @@ describe('Open Food Facts', () => {
   it('falls back to kJ and skips products without calories', () => {
     expect(offToCandidate({ code: '1', product_name: 'X', nutriments: { energy_100g: 418.4 } })?.kcal).toBe(100)
     expect(offToCandidate({ code: '2', product_name: 'Y', nutriments: {} })).toBeNull()
+  })
+
+  it('keeps UK products only and names the main supermarkets', () => {
+    const base = { code: '5', product_name: 'Houmous', nutriments: { 'energy-kcal_100g': 300 } }
+    expect(offToCandidate({ ...base, countries_tags: ['en:france'] })).toBeNull()
+    const c = offToCandidate({ ...base, countries_tags: ['en:united-kingdom'], stores: "Tesco, Sainsbury's,Aldi UK" })
+    expect(c?.stores).toEqual(['Tesco', "Sainsbury's", 'Aldi'])
+    expect(ukStores('Marks & Spencer, Co-op')).toEqual(['M&S', 'Co-op'])
+    expect(ukStores('Carrefour')).toEqual([])
+  })
+
+  it('puts supermarket products first and searches the UK database', () => {
+    const a = offToCandidate({ code: 'a', product_name: 'A', nutriments: { 'energy-kcal_100g': 1 } })!
+    const b = offToCandidate({ code: 'b', product_name: 'B', stores: 'Lidl', nutriments: { 'energy-kcal_100g': 1 } })!
+    expect(rankUkProducts([a, b]).map((f) => f.name)).toEqual(['B', 'A'])
+    const url = openFoodFactsUrl('baked beans')
+    expect(url).toContain('uk.openfoodfacts.org')
+    expect(url).toContain('tag_0=united-kingdom')
+    expect(url).toContain('search_terms=baked%20beans')
+  })
+})
+
+describe('generic food list', () => {
+  it('drops US brands and chains but keeps USDA beef grades', async () => {
+    const { keepRow } = await import('../scripts/build-foods.mjs')
+    expect(keepRow('Bananas, raw')).toBe(true)
+    expect(keepRow('Beef, short loin, t-bone steak, USDA choice, cooked')).toBe(true)
+    expect(keepRow('KFC, Fried Chicken, Drumstick')).toBe(false)
+    expect(keepRow('Cereals ready-to-eat, QUAKER, oat squares')).toBe(false)
+    expect(keepRow('Fast foods, hamburger, single, regular patty, plain')).toBe(false)
   })
 })
